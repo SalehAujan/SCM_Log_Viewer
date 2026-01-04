@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employee Performance Deep-Dive</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+</head>
+<body class="bg-[#0b0e14] text-slate-200 font-sans">
+
+    <nav class="bg-[#161b22] border-b border-slate-800 p-4 sticky top-0 z-50">
+        <div class="container mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                
+                <h1 class="font-bold text-sm uppercase tracking-widest text-slate-400"> SYNXR Employee Analytics</h1>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-4">
+                <input type="file" id="logFile" accept=".txt" class="text-xs text-slate-500 file:bg-slate-800 file:text-slate-300 file:border-0 file:rounded file:px-2 file:py-1 cursor-pointer">
+                
+                <select id="userSelector" onchange="handleUserChange()" class="bg-slate-900 border border-slate-700 text-xs text-cyan-400 font-bold rounded-lg px-3 py-2 outline-none focus:ring-1 ring-cyan-500 transition-all">
+                    <option value="">Select Employee...</option>
+                </select>
+
+                <div class="flex bg-slate-950 p-1 rounded-lg border border-slate-800">
+                    <button onclick="setMode('week')" id="mode-week" class="px-3 py-1 text-[10px] font-bold rounded bg-cyan-600 text-white transition-all">WEEKLY TREND</button>
+                    <button onclick="setMode('day')" id="mode-day" class="px-3 py-1 text-[10px] font-bold rounded text-slate-500 hover:text-slate-300 transition-all">SPECIFIC DAY</button>
+                </div>
+
+                <div id="date-picker-container" class="hidden">
+                    <select id="dateSelector" onchange="refreshDashboard()" class="bg-amber-900/20 border border-amber-500/50 text-amber-500 text-xs font-bold rounded-lg px-3 py-2 outline-none">
+                    </select>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main id="main-ui" class="container mx-auto p-6 hidden">
+        <!-- Dashboard Header -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-[#161b22] p-6 rounded-2xl border border-slate-800">
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Employee</p>
+                <p id="ui-name" class="text-xl font-black text-white truncate">---</p>
+            </div>
+            <div class="bg-[#161b22] p-6 rounded-2xl border border-slate-800">
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Changesets</p>
+                <p id="ui-count" class="text-2xl font-black text-cyan-500">0</p>
+            </div>
+            <div class="bg-[#161b22] p-6 rounded-2xl border border-slate-800">
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Current View</p>
+                <p id="ui-view" class="text-xl font-black text-amber-500">---</p>
+            </div>
+        </div>
+
+        <div class="bg-[#161b22] p-8 rounded-3xl border border-slate-800 shadow-2xl mb-8">
+            <h3 id="chart-title" class="text-sm font-bold text-slate-400 mb-6 uppercase tracking-widest">Timeline Data</h3>
+            <div style="height: 350px;"><canvas id="performanceChart"></canvas></div>
+        </div>
+
+        <div class="bg-[#161b22] rounded-3xl border border-slate-800 overflow-hidden shadow-2xl">
+            <table class="w-full text-left text-sm">
+                <thead class="bg-slate-900 text-[10px] text-slate-500 font-bold uppercase border-b border-slate-800">
+                    <tr>
+                        <th class="p-6">Exact Time</th>
+                        <th class="p-6">Changeset</th>
+                        <th class="p-6">Comment</th>
+                    </tr>
+                </thead>
+                <tbody id="log-table" class="divide-y divide-slate-800"></tbody>
+            </table>
+        </div>
+    </main>
+
+    <div id="empty-state" class="flex flex-col items-center justify-center py-40 opacity-50">
+        <h2 class="text-xl font-bold">Waiting for Plastic SCM Logs...</h2>
+        <p class="text-sm">Upload your log file to begin analysis.</p>
+    </div>
+
+    <script>
+        let dataStore = {}; 
+        let currentMode = 'week'; 
+        let currentChart = null;
+
+        document.getElementById('logFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => processText(e.target.result);
+            reader.readAsText(file);
+        });
+
+        // ROBUST TIME PARSER
+        function parsePlasticDate(dateStr) {
+            // Regex to match "DD/MM/YYYY H:MM:SSAM/PM" or "DD/MM/YYYY HH:MM:SSAM/PM"
+            const match = dateStr.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})(AM|PM)/i);
+            if (!match) return null;
+
+            let [_, day, month, year, hour, min, sec, meridiem] = match;
+            day = parseInt(day);
+            month = parseInt(month) - 1; // 0-indexed months
+            year = parseInt(year);
+            hour = parseInt(hour);
+            min = parseInt(min);
+            sec = parseInt(sec);
+
+            // Correct 12-hour to 24-hour conversion
+            if (meridiem.toUpperCase() === 'PM' && hour < 12) hour += 12;
+            if (meridiem.toUpperCase() === 'AM' && hour === 12) hour = 0;
+
+            const d = new Date(year, month, day, hour, min, sec);
+            return {
+                obj: d,
+                hour: hour,
+                dayKey: `${year}-${String(month+1).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+                displayTime: `${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
+            };
+        }
+
+        function processText(text) {
+            const blocks = text.split('----------------------------');
+            dataStore = {};
+            
+            blocks.forEach(block => {
+                if (!block.trim() || !block.includes('Changeset:')) return;
+
+                const email = block.match(/Owner:\s*([^\n\r]*)/)?.[1]?.trim();
+                const id = block.match(/Changeset:\s*(\d+)/)?.[1];
+                const dateStr = block.match(/Date:\s*(.*)/)?.[1]?.trim();
+                const comment = block.match(/Comment:\s*([\s\S]*)/)?.[1]?.trim() || "";
+
+                if (email && dateStr) {
+                    const parsedDate = parsePlasticDate(dateStr);
+                    if (parsedDate) {
+                        let name = email.split('@')[0].toUpperCase();
+                        if (!dataStore[name]) dataStore[name] = { email, logs: [] };
+                        
+                        dataStore[name].logs.push({
+                            id, comment, 
+                            d: parsedDate.obj,
+                            hour: parsedDate.hour,
+                            dayKey: parsedDate.dayKey,
+                            displayTime: parsedDate.displayTime
+                        });
+                    }
+                }
+            });
+
+            populateEmployees();
+            document.getElementById('empty-state').classList.add('hidden');
+            document.getElementById('main-ui').classList.remove('hidden');
+        }
+
+        function populateEmployees() {
+            const sel = document.getElementById('userSelector');
+            sel.innerHTML = '<option value="">Select Employee...</option>';
+            Object.keys(dataStore).sort().forEach(n => sel.innerHTML += `<option value="${n}">${n}</option>`);
+        }
+
+        function handleUserChange() {
+            const user = document.getElementById('userSelector').value;
+            if (!user) return;
+            const dates = [...new Set(dataStore[user].logs.map(l => l.dayKey))].sort().reverse();
+            const dateSel = document.getElementById('dateSelector');
+            dateSel.innerHTML = dates.map(d => `<option value="${d}">${d}</option>`).join('');
+            refreshDashboard();
+        }
+
+        function setMode(m) {
+            currentMode = m;
+            document.getElementById('mode-week').classList.toggle('bg-cyan-600', m === 'week');
+            document.getElementById('mode-week').classList.toggle('text-slate-500', m !== 'week');
+            document.getElementById('mode-day').classList.toggle('bg-cyan-600', m === 'day');
+            document.getElementById('mode-day').classList.toggle('text-slate-500', m !== 'day');
+            document.getElementById('date-picker-container').classList.toggle('hidden', m !== 'day');
+            refreshDashboard();
+        }
+
+        function refreshDashboard() {
+            const user = document.getElementById('userSelector').value;
+            if (!user) return;
+
+            const allLogs = dataStore[user].logs;
+            const selectedDate = document.getElementById('dateSelector').value;
+
+            let displayLogs = (currentMode === 'day') ? allLogs.filter(l => l.dayKey === selectedDate) : allLogs;
+
+            document.getElementById('ui-name').innerText = user;
+            document.getElementById('ui-count').innerText = displayLogs.length;
+            document.getElementById('ui-view').innerText = (currentMode === 'day') ? selectedDate : "FULL TREND";
+
+            renderChart(displayLogs);
+            renderTable(displayLogs);
+        }
+
+        function renderChart(logs) {
+            const ctx = document.getElementById('performanceChart').getContext('2d');
+            let labels = [], data = [], type = (currentMode === 'day') ? 'bar' : 'line';
+
+            if (currentMode === 'day') {
+                labels = Array.from({length: 24}, (_, i) => `${String(i).padStart(2, '0')}:00`);
+                data = new Array(24).fill(0);
+                logs.forEach(l => data[l.hour]++);
+                document.getElementById('chart-title').innerText = "24-Hour Productivity";
+            } else {
+                const groups = {};
+                logs.forEach(l => {
+                    const key = l.dayKey; // Simplified for "Full Trend"
+                    groups[key] = (groups[key] || 0) + 1;
+                });
+                labels = Object.keys(groups).sort();
+                data = labels.map(k => groups[k]);
+                document.getElementById('chart-title').innerText = "Daily Performance Trend";
+            }
+
+            if (currentChart) currentChart.destroy();
+            currentChart = new Chart(ctx, {
+                type: type,
+                data: {
+                    labels,
+                    datasets: [{
+                        data,
+                        backgroundColor: (type === 'bar') ? '#0891b2' : 'rgba(6,182,212,0.1)',
+                        borderColor: '#06b6d4',
+                        borderWidth: 2,
+                        fill: true, tension: 0.4, borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true, grid: { color: '#1e293b' }, ticks: { color: '#475569', stepSize: 1 } },
+                        x: { grid: { display: false }, ticks: { color: '#475569' } }
+                    }
+                }
+            });
+        }
+
+        function renderTable(logs) {
+            const sorted = [...logs].sort((a,b) => b.d - a.d);
+            document.getElementById('log-table').innerHTML = sorted.map(l => `
+                <tr class="hover:bg-slate-800/30 transition-colors">
+                    <td class="p-6 text-slate-500 font-mono text-xs">${l.displayTime}</td>
+                    <td class="p-6 font-bold text-cyan-500">#${l.id}</td>
+                    <td class="p-6 text-slate-300">${l.comment}</td>
+                </tr>
+            `).join('');
+        }
+    </script>
+</body>
+</html>
