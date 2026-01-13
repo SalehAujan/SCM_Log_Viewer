@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employee Performance Deep-Dive</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-[#0b0e14] text-slate-200 font-sans">
+
+    <nav class="bg-[#161b22] border-b border-slate-800 p-4 sticky top-0 z-50">
+        <div class="container mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <div class="p-2 bg-cyan-500/10 rounded-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 text-cyan-500">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                    </svg>
+                </div>
+                <h1 class="font-bold text-sm uppercase tracking-widest text-slate-400"> SYNXR Employee Analytics</h1>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-4">
+                <input type="file" id="logFile" accept=".txt" class="text-xs text-slate-500 file:bg-slate-800 file:text-slate-300 file:border-0 file:rounded file:px-2 file:py-1 cursor-pointer">
+                
+                <select id="userSelector" onchange="handleUserChange()" class="bg-slate-900 border border-slate-700 text-xs text-cyan-400 font-bold rounded-lg px-3 py-2 outline-none focus:ring-1 ring-cyan-500 transition-all">
+                    <option value="">Select Employee...</option>
+                </select>
+
+                <div class="flex bg-slate-950 p-1 rounded-lg border border-slate-800">
+                    <button onclick="setMode('week')" id="mode-week" class="px-3 py-1 text-[10px] font-bold rounded bg-cyan-600 text-white transition-all">TREND</button>
+                    <button onclick="setMode('day')" id="mode-day" class="px-3 py-1 text-[10px] font-bold rounded text-slate-500 hover:text-slate-300 transition-all">SPECIFIC DAY</button>
+                </div>
+
+                <div id="date-picker-container" class="hidden">
+                    <select id="dateSelector" onchange="refreshDashboard()" class="bg-amber-900/20 border border-amber-500/50 text-amber-500 text-xs font-bold rounded-lg px-3 py-2 outline-none">
+                    </select>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main id="main-ui" class="container mx-auto p-6 hidden">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <!-- Employee Card -->
+            <div class="bg-[#161b22] p-6 rounded-2xl border border-slate-800 flex items-center gap-4">
+                <div class="p-3 bg-slate-800 rounded-xl text-slate-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                    </svg>
+                </div>
+                <div class="min-w-0">
+                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Employee</p>
+                    <p id="ui-name" class="text-xl font-black text-white truncate">---</p>
+                </div>
+            </div>
+
+            <!-- Changesets Card -->
+            <div class="bg-[#161b22] p-6 rounded-2xl border border-slate-800 flex items-center gap-4">
+                <div class="p-3 bg-cyan-500/10 rounded-xl text-cyan-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+                    </svg>
+                </div>
+                <div>
+                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Changesets</p>
+                    <p id="ui-count" class="text-2xl font-black text-cyan-500">0</p>
+                </div>
+            </div>
+
+            <!-- Avg Daily Card -->
+            <div class="bg-[#161b22] p-6 rounded-2xl border border-slate-800 flex items-center gap-4">
+                <div class="p-3 bg-emerald-500/10 rounded-xl text-emerald-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18L9 11.25l4.5 4.5L21.75 7.5" />
+                    </svg>
+                </div>
+                <div>
+                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Avg Daily</p>
+                    <p id="ui-avg" class="text-2xl font-black text-emerald-500">0</p>
+                </div>
+            </div>
+
+            <!-- Current View Card -->
+            <div class="bg-[#161b22] p-6 rounded-2xl border border-slate-800 flex items-center gap-4">
+                <div class="p-3 bg-amber-500/10 rounded-xl text-amber-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+                    </svg>
+                </div>
+                <div class="min-w-0">
+                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Current View</p>
+                    <p id="ui-view" class="text-xl font-black text-amber-500 truncate">---</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chart Section -->
+        <div class="bg-[#161b22] p-8 rounded-3xl border border-slate-800 shadow-2xl mb-8">
+            <div class="flex items-center gap-2 mb-6">
+                 <div class="w-1.5 h-4 bg-cyan-500 rounded-full"></div>
+                 <h3 id="chart-title" class="text-sm font-bold text-slate-400 uppercase tracking-widest">Timeline Data</h3>
+            </div>
+            <div style="height: 350px;"><canvas id="performanceChart"></canvas></div>
+        </div>
+
+        <!-- Table Section -->
+        <div class="bg-[#161b22] rounded-3xl border border-slate-800 overflow-hidden shadow-2xl">
+            <table class="w-full text-left text-sm">
+                <thead class="bg-slate-900 text-[10px] text-slate-500 font-bold uppercase border-b border-slate-800">
+                    <tr>
+                        <th class="p-6">User</th>
+                        <th class="p-6">Exact Time</th>
+                        <th class="p-6">Changeset</th>
+                        <th class="p-6">Comment</th>
+                    </tr>
+                </thead>
+                <tbody id="log-table" class="divide-y divide-slate-800"></tbody>
+            </table>
+        </div>
+    </main>
+
+    <div id="empty-state" class="flex flex-col items-center justify-center py-40 opacity-50 text-center">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor" class="w-20 h-20 mb-4 text-slate-700">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 7.5h1.5m-1.5 3h1.5m-7.5 3h7.5m-7.5 3h7.5m3-9h3.375c.621 0 1.125.504 1.125 1.125V18a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18V6a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 6v1.5" />
+        </svg>
+        <h2 class="text-xl font-bold">Waiting for Plastic SCM Logs...</h2>
+        <p class="text-sm">Upload your <b>.txt</b> log file to begin analysis.</p>
+    </div>
+
+    <script>
+        let dataStore = {}; 
+        let currentMode = 'week'; 
+        let currentChart = null;
+
+        document.getElementById('logFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => processText(e.target.result);
+            reader.readAsText(file);
+        });
+
+        function parsePlasticDate(dateStr) {
+            try {
+                let parts = dateStr.match(/(\d+)[.\/\-](\d+)[.\/\-](\d+)\s+(\d+):(\d+):(\d+)(\s*[APM]+)?/i);
+                if (!parts) {
+                    const simple = dateStr.match(/(\d+)[.\/\-](\d+)[.\/\-](\d+)\s+(\d+):(\d+)/i);
+                    if (!simple) return null;
+                    parts = [...simple, "00", ""];
+                }
+
+                let [_, day, month, year, hour, min, sec, meridiem] = parts;
+                day = parseInt(day);
+                month = parseInt(month) - 1;
+                year = parseInt(year);
+                hour = parseInt(hour);
+                min = parseInt(min);
+                sec = parseInt(sec);
+
+                if (meridiem && meridiem.trim().toUpperCase() === 'PM' && hour < 12) hour += 12;
+                if (meridiem && meridiem.trim().toUpperCase() === 'AM' && hour === 12) hour = 0;
+
+                const d = new Date(year, month, day, hour, min, sec);
+                if (isNaN(d.getTime())) return null;
+
+                return {
+                    obj: d, hour: hour,
+                    dayKey: `${year}-${String(month+1).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+                    displayTime: `${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
+                };
+            } catch (e) { return null; }
+        }
+
+        function processText(text) {
+            const blocks = text.split(/-{5,}/);
+            dataStore = {};
+            let count = 0;
+            
+            blocks.forEach(block => {
+                if (!block.trim() || !block.toLowerCase().includes('changeset:')) return;
+
+                const email = block.match(/Owner:\s*([^\n\r]*)/i)?.[1]?.trim();
+                const id = block.match(/Changeset:\s*(\d+)/i)?.[1];
+                const dateStr = block.match(/Date:\s*(.*)/i)?.[1]?.trim();
+                
+                // Comment cleanup: replace literal \n with newlines and trim whitespace
+                let comment = block.match(/Comment:\s*([\s\S]*)/i)?.[1] || "";
+                comment = comment.replace(/\\n/g, '\n').trim();
+
+                if (email && dateStr) {
+                    const parsedDate = parsePlasticDate(dateStr);
+                    if (parsedDate) {
+                        let name = email.split('@')[0].toUpperCase();
+                        if (!dataStore[name]) dataStore[name] = { email, logs: [] };
+                        
+                        dataStore[name].logs.push({
+                            user: name, id, comment, 
+                            d: parsedDate.obj, hour: parsedDate.hour,
+                            dayKey: parsedDate.dayKey, displayTime: parsedDate.displayTime
+                        });
+                        count++;
+                    }
+                }
+            });
+
+            if (count > 0) {
+                populateEmployees();
+                document.getElementById('empty-state').classList.add('hidden');
+                document.getElementById('main-ui').classList.remove('hidden');
+            }
+        }
+
+        function populateEmployees() {
+            const sel = document.getElementById('userSelector');
+            sel.innerHTML = '<option value="">Select Employee...</option>';
+            sel.innerHTML += '<option value="ALL" class="font-bold">ALL EMPLOYEES</option>';
+            Object.keys(dataStore).sort().forEach(n => sel.innerHTML += `<option value="${n}">${n}</option>`);
+        }
+
+        function handleUserChange() {
+            const user = document.getElementById('userSelector').value;
+            if (!user) return;
+            let logs = (user === 'ALL') ? Object.values(dataStore).flatMap(u => u.logs) : dataStore[user].logs;
+            const dates = [...new Set(logs.map(l => l.dayKey))].sort().reverse();
+            const dateSel = document.getElementById('dateSelector');
+            dateSel.innerHTML = dates.map(d => `<option value="${d}">${d}</option>`).join('');
+            refreshDashboard();
+        }
+
+        function setMode(m) {
+            currentMode = m;
+            document.getElementById('mode-week').classList.toggle('bg-cyan-600', m === 'week');
+            document.getElementById('mode-week').classList.toggle('text-slate-500', m !== 'week');
+            document.getElementById('mode-day').classList.toggle('bg-cyan-600', m === 'day');
+            document.getElementById('mode-day').classList.toggle('text-slate-500', m !== 'day');
+            document.getElementById('date-picker-container').classList.toggle('hidden', m !== 'day');
+            refreshDashboard();
+        }
+
+        function refreshDashboard() {
+            const user = document.getElementById('userSelector').value;
+            if (!user) return;
+
+            let allLogs = (user === 'ALL') ? Object.values(dataStore).flatMap(u => u.logs) : dataStore[user].logs;
+            const selectedDate = document.getElementById('dateSelector').value;
+            let displayLogs = (currentMode === 'day') ? allLogs.filter(l => l.dayKey === selectedDate) : allLogs;
+
+            const activeDays = [...new Set(displayLogs.map(l => l.dayKey))].length;
+            const avg = activeDays > 0 ? (displayLogs.length / activeDays).toFixed(2) : 0;
+
+            document.getElementById('ui-name').innerText = user === 'ALL' ? 'ALL EMPLOYEES' : user;
+            document.getElementById('ui-count').innerText = displayLogs.length;
+            document.getElementById('ui-avg').innerText = avg;
+            document.getElementById('ui-view').innerText = (currentMode === 'day') ? selectedDate : "FULL TREND";
+
+            renderChart(displayLogs);
+            renderTable(displayLogs);
+        }
+
+        function renderChart(logs) {
+            const ctx = document.getElementById('performanceChart').getContext('2d');
+            let labels = [], data = [], type = (currentMode === 'day') ? 'bar' : 'line';
+
+            if (currentMode === 'day') {
+                labels = Array.from({length: 24}, (_, i) => `${String(i).padStart(2, '0')}:00`);
+                data = new Array(24).fill(0);
+                logs.forEach(l => data[l.hour]++);
+                document.getElementById('chart-title').innerText = "24-Hour Productivity";
+            } else {
+                const groups = {};
+                logs.forEach(l => { groups[l.dayKey] = (groups[l.dayKey] || 0) + 1; });
+                labels = Object.keys(groups).sort();
+                data = labels.map(k => groups[k]);
+                document.getElementById('chart-title').innerText = "Daily Performance Trend";
+            }
+
+            if (currentChart) currentChart.destroy();
+            currentChart = new Chart(ctx, {
+                type: type,
+                data: {
+                    labels,
+                    datasets: [{
+                        data,
+                        backgroundColor: (type === 'bar') ? '#0891b2' : 'rgba(6,182,212,0.1)',
+                        borderColor: '#06b6d4',
+                        borderWidth: 2,
+                        fill: true, tension: 0.4, borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true, grid: { color: '#1e293b' }, ticks: { color: '#475569', stepSize: 1 } },
+                        x: { grid: { display: false }, ticks: { color: '#475569' } }
+                    }
+                }
+            });
+        }
+
+        function renderTable(logs) {
+            const sorted = [...logs].sort((a,b) => b.d - a.d);
+            document.getElementById('log-table').innerHTML = sorted.map(l => `
+                <tr class="hover:bg-slate-800/30 transition-colors">
+                    <td class="p-6 text-slate-400 font-bold text-xs uppercase">${l.user}</td>
+                    <td class="p-6 text-slate-500 font-mono text-xs">${l.displayTime}</td>
+                    <td class="p-6 font-bold text-cyan-500">#${l.id}</td>
+                    <td class="p-6 text-slate-300">${l.comment}</td>
+                </tr>
+            `).join('');
+        }
+    </script>
+</body>
+</html>
